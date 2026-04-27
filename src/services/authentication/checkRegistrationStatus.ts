@@ -20,7 +20,7 @@ export default async function checkRegistrationStatus(
     const { data, error } = await config.supabaseClient!
       .from("users")
       .select("*")
-      .ilike("email", `%${email}%`);
+      .eq("email", email);
 
     if (error) {
       console.error("Error checking registration status:", error.message);

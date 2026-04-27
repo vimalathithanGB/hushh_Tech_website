@@ -18,7 +18,7 @@ const configMock = vi.hoisted(() => {
       },
       from: vi.fn(() => ({
           select: vi.fn(() => ({
-              ilike: vi.fn()
+              eq: vi.fn()
           }))
       }))
     }
@@ -57,7 +57,7 @@ const localStorageMock = (() => {
       delete store[key];
     }),
     clear: vi.fn(() => {
-      store = {};
+      Object.keys(store).forEach(key => delete store[key]);
     })
   };
 })();
@@ -88,7 +88,7 @@ describe('Authentication Service', () => {
         if (originalLocation) {
             global.window.location = originalLocation as any;
         }
-        vi.clearAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe('emailLogin', () => {
@@ -197,48 +197,48 @@ describe('Authentication Service', () => {
     });
 
     describe('checkRegistrationStatus', () => {
-        let mockIlike: any;
+        let mockEq: any;
         let mockSelect: any;
         let mockFrom: any;
 
         beforeEach(() => {
-            mockIlike = vi.fn();
-            mockSelect = vi.fn(() => ({ ilike: mockIlike }));
+            mockEq = vi.fn();
+            mockSelect = vi.fn(() => ({ eq: mockEq }));
             mockFrom = vi.fn(() => ({ select: mockSelect }));
             configMock.supabaseClient.from = mockFrom;
         });
 
         it('returns false states on error', async () => {
-            mockIlike.mockResolvedValueOnce({ data: null, error: { message: 'db error' } });
+            mockEq.mockResolvedValueOnce({ data: null, error: { message: 'db error' } });
             const result = await checkRegistrationStatus('test@example.com');
             expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null });
             expect(mockFrom).toHaveBeenCalledWith('users');
             expect(mockSelect).toHaveBeenCalledWith('*');
-            expect(mockIlike).toHaveBeenCalledWith('email', '%test@example.com%');
+            expect(mockEq).toHaveBeenCalledWith('email', 'test@example.com');
         });
 
         it('returns false states when user does not exist', async () => {
-            mockIlike.mockResolvedValueOnce({ data: [], error: null });
+            mockEq.mockResolvedValueOnce({ data: [], error: null });
             const result = await checkRegistrationStatus('test@example.com');
             expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null });
         });
 
         it('returns true when user exists and has hushh_id', async () => {
             const userData = { id: '1', hushh_id: 'hushh123' };
-            mockIlike.mockResolvedValueOnce({ data: [userData], error: null });
+            mockEq.mockResolvedValueOnce({ data: [userData], error: null });
             const result = await checkRegistrationStatus('test@example.com');
             expect(result).toStrictEqual({ isRegistered: true, hasHushhId: true, userData });
         });
 
         it('returns false for registration if user exists but lacks hushh_id', async () => {
             const userData = { id: '1', hushh_id: '   ' };
-            mockIlike.mockResolvedValueOnce({ data: [userData], error: null });
+            mockEq.mockResolvedValueOnce({ data: [userData], error: null });
             const result = await checkRegistrationStatus('test@example.com');
             expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData });
         });
 
         it('handles unexpected exceptions safely', async () => {
-            mockIlike.mockRejectedValueOnce(new Error('unexpected error'));
+            mockEq.mockRejectedValueOnce(new Error('unexpected error'));
             const result = await checkRegistrationStatus('test@example.com');
             expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null });
         });
@@ -250,8 +250,8 @@ describe('Authentication Service', () => {
                 const originalClient = configMock.supabaseClient;
                 (configMock as any).supabaseClient = null;
                 const result = await mfaService.enrollMFA();
-                expect(result.data).toStrictEqual(null);
-                expect(result.error).toBeInstanceOf(Error);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
                 configMock.supabaseClient = originalClient;
             });
 
@@ -311,15 +311,16 @@ describe('Authentication Service', () => {
                 const originalClient = configMock.supabaseClient;
                 (configMock as any).supabaseClient = null;
                 const result = await mfaService.challengeMFA('factor123');
-                expect(result.data).toBe(null);
-                expect(result.error).toBeInstanceOf(Error);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
                 configMock.supabaseClient = originalClient;
             });
 
             it('returns error on challenge fail', async () => {
                 configMock.supabaseClient.auth.mfa.challenge.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.challengeMFA('factor123');
-                expect(result.error).toBeInstanceOf(Error);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
 
             it('returns challenge data', async () => {
@@ -334,15 +335,16 @@ describe('Authentication Service', () => {
                 const originalClient = configMock.supabaseClient;
                 (configMock as any).supabaseClient = null;
                 const result = await mfaService.verifyMFAChallenge('factor123', 'chal123', '123456');
-                expect(result.data).toBe(null);
-                expect(result.error).toBeInstanceOf(Error);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
                 configMock.supabaseClient = originalClient;
             });
 
             it('returns error on fallback', async () => {
                 configMock.supabaseClient.auth.mfa.verify.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.verifyMFAChallenge('factor123', 'chal123', '123456');
-                expect(result.error).toBeInstanceOf(Error);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
 
             it('returns check data', async () => {
@@ -362,22 +364,24 @@ describe('Authentication Service', () => {
             it('handles exceptions in unenroll', async () => {
                 configMock.supabaseClient.auth.mfa.unenroll.mockRejectedValueOnce(new Error('err'));
                 const result = await mfaService.unenrollMFA('1');
-                expect(result.error).toBeInstanceOf(Error);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
 
             it('handles missing client safely', async () => {
                  const originalClient = configMock.supabaseClient;
                  (configMock as any).supabaseClient = null;
                  const result = await mfaService.unenrollMFA('factor123');
-                 expect(result.data).toBe(null);
-                 expect(result.error).toBeInstanceOf(Error);
+                 expect(result.error).toBeDefined();
+                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
                  configMock.supabaseClient = originalClient;
             });
 
             it('handles error from unenroll', async () => {
                 configMock.supabaseClient.auth.mfa.unenroll.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.unenrollMFA('factor123');
-                expect(result.error).toBeInstanceOf(Error);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
         });
 
@@ -386,22 +390,24 @@ describe('Authentication Service', () => {
                  const originalClient = configMock.supabaseClient;
                  (configMock as any).supabaseClient = null;
                  const result = await mfaService.getMFAFactors();
-                 expect(result.data).toBe(null);
-                 expect(result.error).toBeInstanceOf(Error);
+                 expect(result.error).toBeDefined();
+                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
                  configMock.supabaseClient = originalClient;
             });
             it('handles error from listFactors', async () => {
                 configMock.supabaseClient.auth.mfa.listFactors.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.getMFAFactors();
-                expect(result.error).toBeInstanceOf(Error);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
         });
 
         describe('getVerifiedMFAFactors', () => {
-            it('returns empty array when error occurs fetching factors', async () => {
+            it('returns structured error when error occurs fetching factors', async () => {
                 configMock.supabaseClient.auth.mfa.listFactors.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.getVerifiedMFAFactors();
-                expect(result.data).toStrictEqual([]);
+                expect(result.error).toBeDefined();
+                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
 
             it('filters verified statuses explicitly', async () => {
@@ -439,14 +445,15 @@ describe('Authentication Service', () => {
                  const originalClient = configMock.supabaseClient;
                  (configMock as any).supabaseClient = null;
                  const result = await mfaService.getAssuranceLevel();
-                 expect(result.data).toBe(null);
-                 expect(result.error).toBeInstanceOf(Error);
+                 expect(result.error).toBeDefined();
+                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
                  configMock.supabaseClient = originalClient;
             });
             it('handles error correctly', async () => {
                  configMock.supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                  const result = await mfaService.getAssuranceLevel();
-                 expect(result.error).toBeInstanceOf(Error);
+                 expect(result.error).toBeDefined();
+                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
         });
 
@@ -461,10 +468,9 @@ describe('Authentication Service', () => {
                 const result = await mfaService.hasMFAEnrolled();
                 expect(result).toBe(false);
             });
-            it('returns false when error', async () => {
+            it('throws error when error occurs fetching factors', async () => {
                 configMock.supabaseClient.auth.mfa.listFactors.mockResolvedValueOnce({ data: null, error: new Error('err') });
-                const result = await mfaService.hasMFAEnrolled();
-                expect(result).toBe(false);
+                await expect(mfaService.hasMFAEnrolled()).rejects.toThrow('err');
             });
         });
     });

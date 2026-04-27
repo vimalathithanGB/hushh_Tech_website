@@ -200,7 +200,7 @@ export const hasMFAEnrolled = async () => {
     const { data, error } = await getMFAFactors();
 
     if (error || !data) {
-        return false;
+        throw error || new Error("Failed to fetch MFA factors");
     }
 
     return data.length > 0;
@@ -214,7 +214,7 @@ export const getVerifiedMFAFactors = async () => {
     const { data, error } = await getMFAFactors();
 
     if (error || !data) {
-        return { data: [], error };
+        return { data: null, error: error || new Error("Failed to fetch MFA factors") };
     }
 
     const verifiedFactors = data.filter((factor: any) => factor.status === 'verified');
