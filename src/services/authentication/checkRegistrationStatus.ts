@@ -4,6 +4,7 @@ export interface RegistrationStatus {
   isRegistered: boolean;
   hasHushhId: boolean;
   userData?: any;
+  error?: any;
 }
 
 /**
@@ -16,15 +17,17 @@ export default async function checkRegistrationStatus(
   email: string
 ): Promise<RegistrationStatus> {
   try {
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Use the configured Supabase client instead of hardcoded old project URL
     const { data, error } = await config.supabaseClient!
       .from("users")
       .select("*")
-      .eq("email", email);
+      .eq("email", normalizedEmail);
 
     if (error) {
       console.error("Error checking registration status:", error.message);
-      return { isRegistered: false, hasHushhId: false, userData: null };
+      return { isRegistered: false, hasHushhId: false, userData: null, error };
     }
 
     if (data && data.length > 0) {
@@ -35,13 +38,14 @@ export default async function checkRegistrationStatus(
         isRegistered: hasHushhId,
         hasHushhId,
         userData,
+        error: null,
       };
     }
 
     // User doesn't exist in database
-    return { isRegistered: false, hasHushhId: false, userData: null };
+    return { isRegistered: false, hasHushhId: false, userData: null, error: null };
   } catch (error) {
     console.error("Error checking registration status:", error);
-    return { isRegistered: false, hasHushhId: false, userData: null };
+    return { isRegistered: false, hasHushhId: false, userData: null, error };
   }
 }

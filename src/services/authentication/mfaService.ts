@@ -214,11 +214,11 @@ export const getVerifiedMFAFactors = async () => {
     const { data, error } = await getMFAFactors();
 
     if (error || !data) {
-        return { data: null, error: error || new Error("Failed to fetch MFA factors") };
+        throw new Error(`MFA fetch failed: ${error?.message || "Unknown error"}`);
     }
 
     const verifiedFactors = data.filter((factor: any) => factor.status === 'verified');
-    return { data: verifiedFactors, error: null };
+    return verifiedFactors;
 };
 
 const mfaService = {

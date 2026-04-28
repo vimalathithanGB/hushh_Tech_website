@@ -49,7 +49,7 @@ const {
     },
     from: vi.fn(() => ({
       select: vi.fn(() => ({
-        ilike: vi.fn(() => ({
+        eq: vi.fn(() => ({
           data: [],
           error: null,
         })),

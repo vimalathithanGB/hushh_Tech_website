@@ -57,7 +57,7 @@ const localStorageMock = (() => {
       delete store[key];
     }),
     clear: vi.fn(() => {
-      Object.keys(store).forEach(key => delete store[key]);
+      store = {};
     })
   };
 })();
@@ -88,16 +88,20 @@ describe('Authentication Service', () => {
         if (originalLocation) {
             global.window.location = originalLocation as any;
         }
-        vi.restoreAllMocks();
+        localStorageMock.clear();
+        vi.clearAllMocks();
     });
 
     describe('emailLogin', () => {
         it('returns "error" if supabaseClient is not initialized', async () => {
             const originalClient = configMock.supabaseClient;
             (configMock as any).supabaseClient = null;
-            const result = await emailLogin('test@example.com', 'password');
-            expect(result).toStrictEqual('error');
-            configMock.supabaseClient = originalClient;
+            try {
+                const result = await emailLogin('test@example.com', 'password');
+                expect(result).toStrictEqual('error');
+            } finally {
+                configMock.supabaseClient = originalClient;
+            }
         });
 
         it('returns "error" on failed sign in', async () => {
@@ -211,7 +215,7 @@ describe('Authentication Service', () => {
         it('returns false states on error', async () => {
             mockEq.mockResolvedValueOnce({ data: null, error: { message: 'db error' } });
             const result = await checkRegistrationStatus('test@example.com');
-            expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null });
+            expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null, error: { message: 'db error' } });
             expect(mockFrom).toHaveBeenCalledWith('users');
             expect(mockSelect).toHaveBeenCalledWith('*');
             expect(mockEq).toHaveBeenCalledWith('email', 'test@example.com');
@@ -220,27 +224,27 @@ describe('Authentication Service', () => {
         it('returns false states when user does not exist', async () => {
             mockEq.mockResolvedValueOnce({ data: [], error: null });
             const result = await checkRegistrationStatus('test@example.com');
-            expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null });
+            expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null, error: null });
         });
 
         it('returns true when user exists and has hushh_id', async () => {
             const userData = { id: '1', hushh_id: 'hushh123' };
             mockEq.mockResolvedValueOnce({ data: [userData], error: null });
             const result = await checkRegistrationStatus('test@example.com');
-            expect(result).toStrictEqual({ isRegistered: true, hasHushhId: true, userData });
+            expect(result).toStrictEqual({ isRegistered: true, hasHushhId: true, userData, error: null });
         });
 
         it('returns false for registration if user exists but lacks hushh_id', async () => {
             const userData = { id: '1', hushh_id: '   ' };
             mockEq.mockResolvedValueOnce({ data: [userData], error: null });
             const result = await checkRegistrationStatus('test@example.com');
-            expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData });
+            expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData, error: null });
         });
 
         it('handles unexpected exceptions safely', async () => {
             mockEq.mockRejectedValueOnce(new Error('unexpected error'));
             const result = await checkRegistrationStatus('test@example.com');
-            expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null });
+            expect(result).toStrictEqual({ isRegistered: false, hasHushhId: false, userData: null, error: expect.any(Error) });
         });
     });
 
@@ -249,10 +253,13 @@ describe('Authentication Service', () => {
             it('handles missing client initialization safely', async () => {
                 const originalClient = configMock.supabaseClient;
                 (configMock as any).supabaseClient = null;
-                const result = await mfaService.enrollMFA();
-                expect(result.error).toBeDefined();
-                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
-                configMock.supabaseClient = originalClient;
+                try {
+                    const result = await mfaService.enrollMFA();
+                    expect(result.error).toBeInstanceOf(Error);
+                    expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
+                } finally {
+                    configMock.supabaseClient = originalClient;
+                }
             });
 
             it('returns error on enroll failure', async () => {
@@ -310,16 +317,19 @@ describe('Authentication Service', () => {
             it('handles missing client safely', async () => {
                 const originalClient = configMock.supabaseClient;
                 (configMock as any).supabaseClient = null;
-                const result = await mfaService.challengeMFA('factor123');
-                expect(result.error).toBeDefined();
-                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
-                configMock.supabaseClient = originalClient;
+                try {
+                    const result = await mfaService.challengeMFA('factor123');
+                    expect(result.error).toBeInstanceOf(Error);
+                    expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
+                } finally {
+                    configMock.supabaseClient = originalClient;
+                }
             });
 
             it('returns error on challenge fail', async () => {
                 configMock.supabaseClient.auth.mfa.challenge.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.challengeMFA('factor123');
-                expect(result.error).toBeDefined();
+                expect(result.error).toBeInstanceOf(Error);
                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
 
@@ -334,16 +344,19 @@ describe('Authentication Service', () => {
             it('handles missing client safely', async () => {
                 const originalClient = configMock.supabaseClient;
                 (configMock as any).supabaseClient = null;
-                const result = await mfaService.verifyMFAChallenge('factor123', 'chal123', '123456');
-                expect(result.error).toBeDefined();
-                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
-                configMock.supabaseClient = originalClient;
+                try {
+                    const result = await mfaService.verifyMFAChallenge('factor123', 'chal123', '123456');
+                    expect(result.error).toBeInstanceOf(Error);
+                    expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
+                } finally {
+                    configMock.supabaseClient = originalClient;
+                }
             });
 
             it('returns error on fallback', async () => {
                 configMock.supabaseClient.auth.mfa.verify.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.verifyMFAChallenge('factor123', 'chal123', '123456');
-                expect(result.error).toBeDefined();
+                expect(result.error).toBeInstanceOf(Error);
                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
 
@@ -364,23 +377,26 @@ describe('Authentication Service', () => {
             it('handles exceptions in unenroll', async () => {
                 configMock.supabaseClient.auth.mfa.unenroll.mockRejectedValueOnce(new Error('err'));
                 const result = await mfaService.unenrollMFA('1');
-                expect(result.error).toBeDefined();
+                expect(result.error).toBeInstanceOf(Error);
                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
 
             it('handles missing client safely', async () => {
                  const originalClient = configMock.supabaseClient;
                  (configMock as any).supabaseClient = null;
-                 const result = await mfaService.unenrollMFA('factor123');
-                 expect(result.error).toBeDefined();
-                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
-                 configMock.supabaseClient = originalClient;
+                 try {
+                     const result = await mfaService.unenrollMFA('factor123');
+                     expect(result.error).toBeInstanceOf(Error);
+                     expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
+                 } finally {
+                     configMock.supabaseClient = originalClient;
+                 }
             });
 
             it('handles error from unenroll', async () => {
                 configMock.supabaseClient.auth.mfa.unenroll.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.unenrollMFA('factor123');
-                expect(result.error).toBeDefined();
+                expect(result.error).toBeInstanceOf(Error);
                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
         });
@@ -389,15 +405,18 @@ describe('Authentication Service', () => {
             it('handles missing client safely', async () => {
                  const originalClient = configMock.supabaseClient;
                  (configMock as any).supabaseClient = null;
-                 const result = await mfaService.getMFAFactors();
-                 expect(result.error).toBeDefined();
-                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
-                 configMock.supabaseClient = originalClient;
+                 try {
+                     const result = await mfaService.getMFAFactors();
+                     expect(result.error).toBeInstanceOf(Error);
+                     expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
+                 } finally {
+                     configMock.supabaseClient = originalClient;
+                 }
             });
             it('handles error from listFactors', async () => {
                 configMock.supabaseClient.auth.mfa.listFactors.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                 const result = await mfaService.getMFAFactors();
-                expect(result.error).toBeDefined();
+                expect(result.error).toBeInstanceOf(Error);
                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
         });
@@ -405,9 +424,7 @@ describe('Authentication Service', () => {
         describe('getVerifiedMFAFactors', () => {
             it('returns structured error when error occurs fetching factors', async () => {
                 configMock.supabaseClient.auth.mfa.listFactors.mockResolvedValueOnce({ data: null, error: new Error('fail') });
-                const result = await mfaService.getVerifiedMFAFactors();
-                expect(result.error).toBeDefined();
-                expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
+                await expect(mfaService.getVerifiedMFAFactors()).rejects.toThrow();
             });
 
             it('filters verified statuses explicitly', async () => {
@@ -418,19 +435,16 @@ describe('Authentication Service', () => {
                 ];
                 configMock.supabaseClient.auth.mfa.listFactors.mockResolvedValueOnce({ data: { all: factors }, error: null });
                 const result = await mfaService.getVerifiedMFAFactors();
-                expect(result).toStrictEqual({
-                    data: [
-                        { id: '2', status: 'verified' },
-                        { id: '3', status: 'verified' }
-                    ],
-                    error: null
-                });
+                expect(result).toStrictEqual([
+                    { id: '2', status: 'verified' },
+                    { id: '3', status: 'verified' }
+                ]);
             });
             
             it('returns default empty array on missing data.all safely', async () => {
                 configMock.supabaseClient.auth.mfa.listFactors.mockResolvedValueOnce({ data: {}, error: null });
                 const result = await mfaService.getVerifiedMFAFactors();
-                expect(result.data).toStrictEqual([]);
+                expect(result).toStrictEqual([]);
             });
         });
 
@@ -444,15 +458,18 @@ describe('Authentication Service', () => {
             it('handles missing client safely', async () => {
                  const originalClient = configMock.supabaseClient;
                  (configMock as any).supabaseClient = null;
-                 const result = await mfaService.getAssuranceLevel();
-                 expect(result.error).toBeDefined();
-                 expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
-                 configMock.supabaseClient = originalClient;
+                 try {
+                     const result = await mfaService.getAssuranceLevel();
+                     expect(result.error).toBeInstanceOf(Error);
+                     expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
+                 } finally {
+                     configMock.supabaseClient = originalClient;
+                 }
             });
             it('handles error correctly', async () => {
                  configMock.supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel.mockResolvedValueOnce({ data: null, error: new Error('fail') });
                  const result = await mfaService.getAssuranceLevel();
-                 expect(result.error).toBeDefined();
+                 expect(result.error).toBeInstanceOf(Error);
                  expect(result).toStrictEqual({ data: null, error: expect.any(Error) });
             });
         });
